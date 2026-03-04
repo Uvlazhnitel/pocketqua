@@ -8,6 +8,7 @@ from backend.app.api.portfolio import router as portfolio_router
 from backend.app.api.risk import router as risk_router
 from backend.app.api.staking import router as staking_router
 from backend.app.api.strategy import router as strategy_router
+from backend.app.api.telegram import router as telegram_router
 from backend.app.core.logging import configure_logging
 from backend.app.core.settings import settings
 from backend.app.db.base import Base, engine
@@ -33,3 +34,4 @@ app.include_router(staking_router)
 app.include_router(actions_router)
 app.include_router(risk_router)
 app.include_router(journal_router)
+app.include_router(telegram_router)

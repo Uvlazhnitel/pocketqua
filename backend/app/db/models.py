@@ -196,3 +196,21 @@ class DecisionJournal(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class TelegramChat(Base):
+    __tablename__ = "telegram_chats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    daily_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    weekly_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_daily_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_weekly_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

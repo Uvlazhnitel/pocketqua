@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.app.db import crud
@@ -39,8 +39,13 @@ def upsert_staking_position(
 
 
 @router.get("/positions", response_model=list[StakingPositionOut])
-def list_staking_positions(db: Session = Depends(get_db)) -> list[StakingPositionOut]:
+def list_staking_positions(
+    limit: int | None = Query(default=None, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> list[StakingPositionOut]:
     rows = crud.list_staking_positions(db)
+    if limit is not None:
+        rows = rows[:limit]
     return [_to_out(row) for row in rows]
 
 

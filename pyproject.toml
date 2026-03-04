@@ -12,6 +12,7 @@ dependencies = [
   "alembic>=1.16.0",
   "httpx>=0.28.0",
   "python-telegram-bot>=22.3",
+  "apscheduler>=3.10.4",
   "python-dotenv>=1.1.0",
   "pytest>=8.4.0",
 ]
@@ -21,8 +22,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["backend*"]
+include = ["backend*", "bot*"]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
+testpaths = ["backend/tests", "bot/tests"]
 pythonpath = ["."]

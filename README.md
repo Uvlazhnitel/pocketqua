@@ -1,6 +1,6 @@
-# pocketquant (Phase 3, USD-first)
+# pocketquant (Phase 4, USD-first)
 
-Core API + Rules Engine + Staking Hub + Risk Guardrails + Decision Journal.
+Core API + Rules Engine + Staking Hub + Risk Guardrails + Decision Journal + Telegram Copilot.
 
 ## Features
 
@@ -10,6 +10,8 @@ Core API + Rules Engine + Staking Hub + Risk Guardrails + Decision Journal.
 - Staking actions (`staking_unlock_plan`, `staking_claim`, `staking_restake`)
 - Risk guardrails (asset/provider concentration, drawdown mode, fee guard)
 - Decision journal for action status changes
+- Telegram commands: `/portfolio`, `/actions`, `/staking`, `/explain <id>`
+- Daily + weekly digest scheduler (in-process, local timezone)
 
 ## Setup
 
@@ -24,14 +26,21 @@ cp .env.example .env
 ## Run API
 
 ```bash
-uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-or:
-
-```bash
 make run-api
 ```
+
+## Run Bot
+
+```bash
+make run-bot
+```
+
+Bot requires:
+- `TELEGRAM_BOT_TOKEN`
+- `BACKEND_BASE_URL`
+- `BOT_TIMEZONE`
+- `DAILY_DIGEST_HOUR`
+- `WEEKLY_DIGEST_WEEKDAY`
 
 ## Run tests
 
@@ -65,7 +74,7 @@ curl -X POST http://127.0.0.1:8000/v1/staking/positions -H 'Content-Type: applic
 }'
 
 curl -X POST http://127.0.0.1:8000/v1/actions/generate
-curl http://127.0.0.1:8000/v1/actions
+curl 'http://127.0.0.1:8000/v1/actions?status=new&limit=5'
 curl http://127.0.0.1:8000/v1/risk/summary
 ```
 
@@ -74,4 +83,11 @@ curl http://127.0.0.1:8000/v1/risk/summary
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/actions/1/status -H 'Content-Type: application/json' -d '{"new_status":"done","note":"executed"}'
 curl http://127.0.0.1:8000/v1/journal
+```
+
+## Telegram chat config endpoints
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/telegram/chats/register -H 'Content-Type: application/json' -d '{"chat_id":123456,"timezone":"Europe/Riga","daily_enabled":true,"weekly_enabled":true}'
+curl http://127.0.0.1:8000/v1/telegram/chats
 ```

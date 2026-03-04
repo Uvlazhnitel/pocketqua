@@ -8,6 +8,10 @@ class Settings(BaseSettings):
         default="https://api.coingecko.com/api/v3", alias="COINGECKO_BASE_URL"
     )
     telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
+    backend_base_url: str = Field(default="http://127.0.0.1:8000", alias="BACKEND_BASE_URL")
+    bot_timezone: str = Field(default="UTC", alias="BOT_TIMEZONE")
+    daily_digest_hour: int = Field(default=9, alias="DAILY_DIGEST_HOUR")
+    weekly_digest_weekday: str = Field(default="MON", alias="WEEKLY_DIGEST_WEEKDAY")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 

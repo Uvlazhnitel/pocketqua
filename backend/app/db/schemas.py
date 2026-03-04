@@ -189,6 +189,11 @@ class ActionOut(BaseModel):
     status: str
 
 
+class ActionQueryIn(BaseModel):
+    status: RecommendationStatusSchema | None = None
+    limit: int = Field(default=5, ge=1, le=100)
+
+
 class ActionStatusUpdateIn(BaseModel):
     new_status: RecommendationStatusSchema
     note: str | None = None
@@ -223,3 +228,28 @@ class RiskSummaryOut(BaseModel):
     risk_mode: str
     asset_concentration_breaches: list[RiskBreachOut]
     provider_concentration_breaches: list[RiskBreachOut]
+
+
+class TelegramChatRegisterIn(BaseModel):
+    chat_id: int
+    timezone: str = "UTC"
+    daily_enabled: bool = True
+    weekly_enabled: bool = True
+
+
+class TelegramChatToggleIn(BaseModel):
+    daily_enabled: bool | None = None
+    weekly_enabled: bool | None = None
+    timezone: str | None = None
+
+
+class TelegramChatOut(BaseModel):
+    id: int
+    chat_id: int
+    timezone: str
+    daily_enabled: bool
+    weekly_enabled: bool
+    last_daily_sent_at: datetime | None
+    last_weekly_sent_at: datetime | None
+    created_at: datetime
+    updated_at: datetime

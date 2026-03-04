@@ -279,10 +279,18 @@ def update_recommendation_status(
     return rec
 
 
-def list_recommendations(db: Session) -> list[models.Recommendation]:
-    return list(
-        db.scalars(select(models.Recommendation).order_by(desc(models.Recommendation.created_at)))
-    )
+def list_recommendations(
+    db: Session,
+    *,
+    status: models.RecommendationStatus | None = None,
+    limit: int | None = None,
+) -> list[models.Recommendation]:
+    stmt = select(models.Recommendation).order_by(desc(models.Recommendation.created_at))
+    if status is not None:
+        stmt = stmt.where(models.Recommendation.status == status)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(db.scalars(stmt))
 
 
 def create_portfolio_snapshot(
@@ -313,3 +321,87 @@ def get_latest_portfolio_snapshot(db: Session) -> models.PortfolioSnapshot | Non
 
 def list_decision_journal(db: Session) -> list[models.DecisionJournal]:
     return list(db.scalars(select(models.DecisionJournal).order_by(desc(models.DecisionJournal.created_at))))
+
+
+def register_telegram_chat(
+    db: Session,
+    *,
+    chat_id: int,
+    timezone: str,
+    daily_enabled: bool,
+    weekly_enabled: bool,
+) -> models.TelegramChat:
+    row = db.scalar(select(models.TelegramChat).where(models.TelegramChat.chat_id == chat_id))
+    if row is None:
+        row = models.TelegramChat(
+            chat_id=chat_id,
+            timezone=timezone,
+            daily_enabled=daily_enabled,
+            weekly_enabled=weekly_enabled,
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+        db.add(row)
+        db.flush()
+        return row
+
+    row.timezone = timezone
+    row.daily_enabled = daily_enabled
+    row.weekly_enabled = weekly_enabled
+    row.updated_at = utcnow()
+    db.flush()
+    return row
+
+
+def update_telegram_chat(
+    db: Session,
+    *,
+    chat_id: int,
+    timezone: str | None = None,
+    daily_enabled: bool | None = None,
+    weekly_enabled: bool | None = None,
+) -> models.TelegramChat | None:
+    row = db.scalar(select(models.TelegramChat).where(models.TelegramChat.chat_id == chat_id))
+    if row is None:
+        return None
+    if timezone is not None:
+        row.timezone = timezone
+    if daily_enabled is not None:
+        row.daily_enabled = daily_enabled
+    if weekly_enabled is not None:
+        row.weekly_enabled = weekly_enabled
+    row.updated_at = utcnow()
+    db.flush()
+    return row
+
+
+def list_telegram_chats(
+    db: Session,
+    *,
+    daily_enabled: bool | None = None,
+    weekly_enabled: bool | None = None,
+) -> list[models.TelegramChat]:
+    stmt = select(models.TelegramChat).order_by(models.TelegramChat.created_at.asc())
+    if daily_enabled is not None:
+        stmt = stmt.where(models.TelegramChat.daily_enabled == daily_enabled)
+    if weekly_enabled is not None:
+        stmt = stmt.where(models.TelegramChat.weekly_enabled == weekly_enabled)
+    return list(db.scalars(stmt))
+
+
+def mark_daily_sent(db: Session, *, chat_id: int) -> None:
+    row = db.scalar(select(models.TelegramChat).where(models.TelegramChat.chat_id == chat_id))
+    if row is None:
+        return
+    row.last_daily_sent_at = utcnow()
+    row.updated_at = utcnow()
+    db.flush()
+
+
+def mark_weekly_sent(db: Session, *, chat_id: int) -> None:
+    row = db.scalar(select(models.TelegramChat).where(models.TelegramChat.chat_id == chat_id))
+    if row is None:
+        return
+    row.last_weekly_sent_at = utcnow()
+    row.updated_at = utcnow()
+    db.flush()

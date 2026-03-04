@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.app.db import crud, models
@@ -79,8 +79,19 @@ def generate_actions(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("", response_model=list[ActionOut])
-def list_actions(db: Session = Depends(get_db)) -> list[ActionOut]:
-    rows = crud.list_recommendations(db)
+def list_actions(
+    status: str | None = Query(default=None),
+    limit: int = Query(default=5, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> list[ActionOut]:
+    parsed_status = None
+    if status is not None:
+        try:
+            parsed_status = models.RecommendationStatus(status)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="invalid status") from exc
+
+    rows = crud.list_recommendations(db, status=parsed_status, limit=limit)
     result: list[ActionOut] = []
     for row in rows:
         payload = row.payload_json or {}
@@ -99,6 +110,26 @@ def list_actions(db: Session = Depends(get_db)) -> list[ActionOut]:
             )
         )
     return result
+
+
+@router.get("/{action_id}", response_model=ActionOut)
+def get_action(action_id: int, db: Session = Depends(get_db)) -> ActionOut:
+    row = crud.get_recommendation(db, action_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="action not found")
+    payload = row.payload_json or {}
+    return ActionOut(
+        id=row.id,
+        action_type=row.action_type.value,
+        title=row.title,
+        reason=row.reason,
+        effect=payload.get("effect", ""),
+        estimated_cost_usd=payload.get("estimated_cost_usd"),
+        risk_note=payload.get("risk_note"),
+        calculation=payload.get("calculation", {}),
+        created_at=row.created_at,
+        status=row.status.value,
+    )
 
 
 @router.post("/{action_id}/status", response_model=ActionOut)
