@@ -49,33 +49,30 @@ def build_staking_actions(
                         ),
                         payload_json=build_action_payload(
                             effect="Prepare rebalance/liquidity action before unlock",
-                            estimated_cost_eur=None,
+                            estimated_cost_usd=None,
                             risk_note=None,
                             calculation={
                                 "position_id": position.id,
                                 "symbol": symbol,
                                 "provider": provider,
-                                "pending_rewards_eur": position.pending_rewards_eur,
-                                "estimated_fee_eur": position.pending_rewards_eur
+                                "pending_rewards_usd": position.pending_rewards_usd,
+                                "estimated_fee_usd": position.pending_rewards_usd
                                 * (position.fee_percent / 100),
-                                "net_reward_eur": position.pending_rewards_eur
-                                - position.pending_rewards_eur * (position.fee_percent / 100),
+                                "net_reward_usd": position.pending_rewards_usd
+                                - position.pending_rewards_usd * (position.fee_percent / 100),
                                 "unlock_at": unlock_at.isoformat(),
                             },
                         ),
                     )
                 )
 
-        if position.next_claim_at is not None:
-            next_claim_at = _as_utc(position.next_claim_at)
-        else:
-            next_claim_at = None
+        next_claim_at = _as_utc(position.next_claim_at) if position.next_claim_at else None
 
         if next_claim_at is not None and next_claim_at <= now:
-            estimated_fee_eur = position.pending_rewards_eur * (position.fee_percent / 100)
-            net_reward_eur = position.pending_rewards_eur - estimated_fee_eur
+            estimated_fee_usd = position.pending_rewards_usd * (position.fee_percent / 100)
+            net_reward_usd = position.pending_rewards_usd - estimated_fee_usd
 
-            if net_reward_eur >= strategy.staking_min_net_reward_eur:
+            if net_reward_usd >= strategy.staking_min_net_reward_usd:
                 action_type = (
                     models.ActionType.STAKING_RESTAKE
                     if strategy.staking_restake_enabled
@@ -88,8 +85,8 @@ def build_staking_actions(
                         title=f"{verb} rewards for {symbol} at {provider}",
                         reason=(
                             f"Claim due since {next_claim_at.isoformat()}; "
-                            f"net reward {net_reward_eur:.2f} EUR >= "
-                            f"threshold {strategy.staking_min_net_reward_eur:.2f} EUR"
+                            f"net reward {net_reward_usd:.2f} USD >= "
+                            f"threshold {strategy.staking_min_net_reward_usd:.2f} USD"
                         ),
                         payload_json=build_action_payload(
                             effect=(
@@ -97,15 +94,15 @@ def build_staking_actions(
                                 if action_type == models.ActionType.STAKING_RESTAKE
                                 else "Realize staking rewards"
                             ),
-                            estimated_cost_eur=estimated_fee_eur,
+                            estimated_cost_usd=estimated_fee_usd,
                             risk_note=None,
                             calculation={
                                 "position_id": position.id,
                                 "symbol": symbol,
                                 "provider": provider,
-                                "pending_rewards_eur": position.pending_rewards_eur,
-                                "estimated_fee_eur": estimated_fee_eur,
-                                "net_reward_eur": net_reward_eur,
+                                "pending_rewards_usd": position.pending_rewards_usd,
+                                "estimated_fee_usd": estimated_fee_usd,
+                                "net_reward_usd": net_reward_usd,
                                 "next_claim_at": next_claim_at.isoformat(),
                             },
                         ),

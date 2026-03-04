@@ -17,7 +17,7 @@ def test_staking_position_crud(client) -> None:
             "unbonding_days": 0,
             "is_locked": False,
             "pending_rewards_asset": 0.1,
-            "pending_rewards_eur": 25.0,
+            "pending_rewards_usd": 25.0,
             "next_claim_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
         },
     )
@@ -31,10 +31,10 @@ def test_staking_position_crud(client) -> None:
 
     patch = client.patch(
         f"/v1/staking/positions/{row_id}",
-        json={"pending_rewards_eur": 30.0},
+        json={"pending_rewards_usd": 30.0},
     )
     assert patch.status_code == 200
-    assert patch.json()["pending_rewards_eur"] == 30.0
+    assert patch.json()["pending_rewards_usd"] == 30.0
 
     delete = client.delete(f"/v1/staking/positions/{row_id}")
     assert delete.status_code == 200
@@ -46,11 +46,11 @@ def test_staking_actions_generated_without_targets(client) -> None:
         "/v1/strategy",
         json={
             "name": "StakingOnly",
-            "base_currency": "EUR",
+            "base_currency": "USD",
             "dca_enabled": False,
             "dca_interval_days": 7,
             "staking_unlock_window_days": 3,
-            "staking_min_net_reward_eur": 10.0,
+            "staking_min_net_reward_usd": 10.0,
             "staking_restake_enabled": True,
             "targets": [],
         },
@@ -72,7 +72,7 @@ def test_staking_actions_generated_without_targets(client) -> None:
             "unlock_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "next_claim_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
             "pending_rewards_asset": 0.1,
-            "pending_rewards_eur": 20.0,
+            "pending_rewards_usd": 20.0,
         },
     )
 
@@ -92,7 +92,7 @@ def test_generate_returns_422_without_targets_and_without_staking_actions(client
         "/v1/strategy",
         json={
             "name": "Empty",
-            "base_currency": "EUR",
+            "base_currency": "USD",
             "dca_enabled": False,
             "dca_interval_days": 7,
             "targets": [],

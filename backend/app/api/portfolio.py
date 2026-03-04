@@ -36,7 +36,7 @@ def upsert_price(payload: PriceUpsertIn, db: Session = Depends(get_db)) -> dict:
         db.rollback()
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return {"id": price.id, "symbol": payload.symbol, "price_eur": price.price_eur}
+    return {"id": price.id, "symbol": payload.symbol, "price_usd": price.price_usd}
 
 
 @router.get("/summary", response_model=PortfolioSummaryOut)

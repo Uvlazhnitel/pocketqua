@@ -11,13 +11,20 @@ class AssetClassSchema(str, Enum):
     stable = "stable"
 
 
+class RecommendationStatusSchema(str, Enum):
+    new = "new"
+    done = "done"
+    postponed = "postponed"
+    dismissed = "dismissed"
+
+
 class PositionUpsertIn(BaseModel):
     symbol: str
     name: str
     asset_class: AssetClassSchema
     account: str = "manual"
     amount: float
-    avg_cost_eur: float | None = None
+    avg_cost_usd: float | None = None
 
     @field_validator("symbol")
     @classmethod
@@ -30,7 +37,7 @@ class PositionUpsertIn(BaseModel):
 
 class PriceUpsertIn(BaseModel):
     symbol: str
-    price_eur: float = Field(gt=0)
+    price_usd: float = Field(gt=0)
 
     @field_validator("symbol")
     @classmethod
@@ -66,21 +73,29 @@ class TargetIn(BaseModel):
 
 class StrategyUpsertIn(BaseModel):
     name: str
-    base_currency: str = "EUR"
+    base_currency: str = "USD"
     dca_enabled: bool = False
     dca_interval_days: int = Field(default=7, ge=1)
     staking_unlock_window_days: int = Field(default=3, ge=1)
-    staking_min_net_reward_eur: float = Field(default=10.0, ge=0)
+    staking_min_net_reward_usd: float = Field(default=10.0, ge=0)
     staking_restake_enabled: bool = True
+
+    max_asset_weight: float = Field(default=0.60, ge=0, le=1)
+    max_provider_weight: float = Field(default=0.50, ge=0, le=1)
+    drawdown_caution_pct: float = Field(default=0.10, ge=0, le=1)
+    drawdown_defense_pct: float = Field(default=0.20, ge=0, le=1)
+    min_trade_value_usd: float = Field(default=50.0, ge=0)
+
     targets: list[TargetIn] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_weights(self) -> "StrategyUpsertIn":
-        if not self.targets:
-            return self
-        total = sum(t.target_weight for t in self.targets)
-        if abs(total - 1.0) > 1e-9:
-            raise ValueError("sum of target_weight must equal 1.0")
+    def validate_weights_and_thresholds(self) -> "StrategyUpsertIn":
+        if self.targets:
+            total = sum(t.target_weight for t in self.targets)
+            if abs(total - 1.0) > 1e-9:
+                raise ValueError("sum of target_weight must equal 1.0")
+        if self.drawdown_caution_pct >= self.drawdown_defense_pct:
+            raise ValueError("drawdown_caution_pct must be less than drawdown_defense_pct")
         return self
 
 
@@ -99,7 +114,7 @@ class StakingPositionUpsertIn(BaseModel):
     unlock_at: datetime | None = None
     next_claim_at: datetime | None = None
     pending_rewards_asset: float = Field(default=0.0, ge=0)
-    pending_rewards_eur: float = Field(default=0.0, ge=0)
+    pending_rewards_usd: float = Field(default=0.0, ge=0)
 
     @field_validator("symbol")
     @classmethod
@@ -128,7 +143,7 @@ class StakingPositionPatchIn(BaseModel):
     unlock_at: datetime | None = None
     next_claim_at: datetime | None = None
     pending_rewards_asset: float | None = Field(default=None, ge=0)
-    pending_rewards_eur: float | None = Field(default=None, ge=0)
+    pending_rewards_usd: float | None = Field(default=None, ge=0)
 
 
 class StakingPositionOut(BaseModel):
@@ -145,18 +160,18 @@ class StakingPositionOut(BaseModel):
     unlock_at: datetime | None
     next_claim_at: datetime | None
     pending_rewards_asset: float
-    pending_rewards_eur: float
+    pending_rewards_usd: float
     last_updated_at: datetime
 
 
 class AssetValuationOut(BaseModel):
     symbol: str
-    value_eur: float
+    value_usd: float
     weight: float
 
 
 class PortfolioSummaryOut(BaseModel):
-    total_value_eur: float
+    total_value_usd: float
     assets: list[AssetValuationOut]
     warnings: list[str]
 
@@ -167,8 +182,44 @@ class ActionOut(BaseModel):
     title: str
     reason: str
     effect: str
-    estimated_cost_eur: float | None
+    estimated_cost_usd: float | None
     risk_note: str | None
     calculation: dict
     created_at: datetime
     status: str
+
+
+class ActionStatusUpdateIn(BaseModel):
+    new_status: RecommendationStatusSchema
+    note: str | None = None
+
+    @field_validator("new_status")
+    @classmethod
+    def disallow_new(cls, value: RecommendationStatusSchema) -> RecommendationStatusSchema:
+        if value == RecommendationStatusSchema.new:
+            raise ValueError("new_status must be done, postponed, or dismissed")
+        return value
+
+
+class DecisionJournalOut(BaseModel):
+    id: int
+    recommendation_id: int
+    old_status: str
+    new_status: str
+    note: str | None
+    created_at: datetime
+
+
+class RiskBreachOut(BaseModel):
+    key: str
+    current_weight: float
+    limit: float
+
+
+class RiskSummaryOut(BaseModel):
+    current_total_value_usd: float
+    peak_total_value_usd: float
+    drawdown_pct: float
+    risk_mode: str
+    asset_concentration_breaches: list[RiskBreachOut]
+    provider_concentration_breaches: list[RiskBreachOut]

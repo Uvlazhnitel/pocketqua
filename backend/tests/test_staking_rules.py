@@ -8,13 +8,18 @@ def _strategy(**kwargs) -> models.Strategy:
     defaults = {
         "id": 1,
         "name": "mvp",
-        "base_currency": "EUR",
+        "base_currency": "USD",
         "is_active": True,
         "dca_enabled": False,
         "dca_interval_days": 7,
         "staking_unlock_window_days": 3,
-        "staking_min_net_reward_eur": 10.0,
+        "staking_min_net_reward_usd": 10.0,
         "staking_restake_enabled": True,
+        "max_asset_weight": 0.60,
+        "max_provider_weight": 0.50,
+        "drawdown_caution_pct": 0.10,
+        "drawdown_defense_pct": 0.20,
+        "min_trade_value_usd": 50.0,
         "created_at": datetime.now(timezone.utc),
     }
     defaults.update(kwargs)
@@ -38,7 +43,7 @@ def _staking_position(**kwargs) -> models.StakingPosition:
         "unlock_at": None,
         "next_claim_at": None,
         "pending_rewards_asset": 0.0,
-        "pending_rewards_eur": 0.0,
+        "pending_rewards_usd": 0.0,
         "last_updated_at": datetime.now(timezone.utc),
     }
     defaults.update(kwargs)
@@ -49,7 +54,16 @@ def test_unlock_plan_generated_in_window() -> None:
     strategy = _strategy(staking_unlock_window_days=3)
     pos = _staking_position(is_locked=True, unlock_at=datetime.now(timezone.utc) + timedelta(days=1))
 
-    actions = run_rules(strategy=strategy, targets=[], weights={}, staking_positions=[pos])
+    actions = run_rules(
+        strategy=strategy,
+        targets=[],
+        weights={},
+        staking_positions=[pos],
+        total_value_usd=10000,
+        price_by_symbol={},
+        risk_mode=models.RiskMode.NORMAL,
+        previous_risk_mode=models.RiskMode.NORMAL,
+    )
     action_types = {a.action_type for a in actions}
     assert models.ActionType.STAKING_UNLOCK_PLAN in action_types
 
@@ -58,34 +72,61 @@ def test_unlock_plan_not_generated_outside_window() -> None:
     strategy = _strategy(staking_unlock_window_days=3)
     pos = _staking_position(is_locked=True, unlock_at=datetime.now(timezone.utc) + timedelta(days=10))
 
-    actions = run_rules(strategy=strategy, targets=[], weights={}, staking_positions=[pos])
+    actions = run_rules(
+        strategy=strategy,
+        targets=[],
+        weights={},
+        staking_positions=[pos],
+        total_value_usd=10000,
+        price_by_symbol={},
+        risk_mode=models.RiskMode.NORMAL,
+        previous_risk_mode=models.RiskMode.NORMAL,
+    )
     action_types = {a.action_type for a in actions}
     assert models.ActionType.STAKING_UNLOCK_PLAN not in action_types
     assert models.ActionType.NOOP in action_types
 
 
 def test_claim_or_restake_generated_on_due_and_threshold() -> None:
-    strategy = _strategy(staking_min_net_reward_eur=10.0, staking_restake_enabled=True)
+    strategy = _strategy(staking_min_net_reward_usd=10.0, staking_restake_enabled=True)
     pos = _staking_position(
-        pending_rewards_eur=20.0,
+        pending_rewards_usd=20.0,
         fee_percent=10.0,
         next_claim_at=datetime.now(timezone.utc) - timedelta(hours=1),
     )
 
-    actions = run_rules(strategy=strategy, targets=[], weights={}, staking_positions=[pos])
+    actions = run_rules(
+        strategy=strategy,
+        targets=[],
+        weights={},
+        staking_positions=[pos],
+        total_value_usd=10000,
+        price_by_symbol={},
+        risk_mode=models.RiskMode.NORMAL,
+        previous_risk_mode=models.RiskMode.NORMAL,
+    )
     action_types = {a.action_type for a in actions}
     assert models.ActionType.STAKING_RESTAKE in action_types
 
 
 def test_claim_not_generated_if_below_threshold() -> None:
-    strategy = _strategy(staking_min_net_reward_eur=50.0)
+    strategy = _strategy(staking_min_net_reward_usd=50.0)
     pos = _staking_position(
-        pending_rewards_eur=20.0,
+        pending_rewards_usd=20.0,
         fee_percent=10.0,
         next_claim_at=datetime.now(timezone.utc) - timedelta(hours=1),
     )
 
-    actions = run_rules(strategy=strategy, targets=[], weights={}, staking_positions=[pos])
+    actions = run_rules(
+        strategy=strategy,
+        targets=[],
+        weights={},
+        staking_positions=[pos],
+        total_value_usd=10000,
+        price_by_symbol={},
+        risk_mode=models.RiskMode.NORMAL,
+        previous_risk_mode=models.RiskMode.NORMAL,
+    )
     action_types = {a.action_type for a in actions}
     assert models.ActionType.STAKING_RESTAKE not in action_types
     assert models.ActionType.STAKING_CLAIM not in action_types
@@ -94,6 +135,15 @@ def test_claim_not_generated_if_below_threshold() -> None:
 
 def test_noop_only_when_no_portfolio_and_no_staking_actions() -> None:
     strategy = _strategy()
-    actions = run_rules(strategy=strategy, targets=[], weights={}, staking_positions=[])
+    actions = run_rules(
+        strategy=strategy,
+        targets=[],
+        weights={},
+        staking_positions=[],
+        total_value_usd=10000,
+        price_by_symbol={},
+        risk_mode=models.RiskMode.NORMAL,
+        previous_risk_mode=models.RiskMode.NORMAL,
+    )
     assert len(actions) == 1
     assert actions[0].action_type == models.ActionType.NOOP

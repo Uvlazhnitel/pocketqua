@@ -7,7 +7,7 @@ def test_portfolio_summary_api(client) -> None:
             "asset_class": "crypto",
             "account": "spot",
             "amount": 1.0,
-            "avg_cost_eur": 15000.0,
+            "avg_cost_usd": 15000.0,
         },
     )
     assert response.status_code == 200
@@ -24,13 +24,13 @@ def test_portfolio_summary_api(client) -> None:
     )
     assert response.status_code == 200
 
-    assert client.post("/v1/portfolio/prices", json={"symbol": "BTC", "price_eur": 20000}).status_code == 200
-    assert client.post("/v1/portfolio/prices", json={"symbol": "ETH", "price_eur": 1000}).status_code == 200
+    assert client.post("/v1/portfolio/prices", json={"symbol": "BTC", "price_usd": 20000}).status_code == 200
+    assert client.post("/v1/portfolio/prices", json={"symbol": "ETH", "price_usd": 1000}).status_code == 200
 
     summary = client.get("/v1/portfolio/summary")
     assert summary.status_code == 200
     payload = summary.json()
-    assert payload["total_value_eur"] == 22000.0
+    assert payload["total_value_usd"] == 22000.0
 
     weights = {row["symbol"]: row["weight"] for row in payload["assets"]}
     assert round(weights["BTC"], 6) == round(20000 / 22000, 6)
@@ -58,14 +58,14 @@ def test_generate_actions_and_list(client) -> None:
             "amount": 1.0,
         },
     )
-    client.post("/v1/portfolio/prices", json={"symbol": "BTC", "price_eur": 20000})
-    client.post("/v1/portfolio/prices", json={"symbol": "ETH", "price_eur": 20000})
+    client.post("/v1/portfolio/prices", json={"symbol": "BTC", "price_usd": 20000})
+    client.post("/v1/portfolio/prices", json={"symbol": "ETH", "price_usd": 20000})
 
     strategy_resp = client.post(
         "/v1/strategy",
         json={
             "name": "Core",
-            "base_currency": "EUR",
+            "base_currency": "USD",
             "dca_enabled": False,
             "dca_interval_days": 7,
             "targets": [

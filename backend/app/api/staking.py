@@ -23,7 +23,7 @@ def _to_out(row) -> StakingPositionOut:
         unlock_at=row.unlock_at,
         next_claim_at=row.next_claim_at,
         pending_rewards_asset=row.pending_rewards_asset,
-        pending_rewards_eur=row.pending_rewards_eur,
+        pending_rewards_usd=row.pending_rewards_usd,
         last_updated_at=row.last_updated_at,
     )
 

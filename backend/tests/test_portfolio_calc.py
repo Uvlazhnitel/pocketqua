@@ -27,12 +27,12 @@ def test_portfolio_snapshot_value_and_weights() -> None:
                 amount=10.0,
             ),
         )
-        crud.upsert_price(db, PriceUpsertIn(symbol="BTC", price_eur=20000.0))
-        crud.upsert_price(db, PriceUpsertIn(symbol="ETH", price_eur=2000.0))
+        crud.upsert_price(db, PriceUpsertIn(symbol="BTC", price_usd=20000.0))
+        crud.upsert_price(db, PriceUpsertIn(symbol="ETH", price_usd=2000.0))
         db.commit()
 
         snapshot = build_portfolio_snapshot(db)
-        assert snapshot["total_value_eur"] == 40000.0
+        assert snapshot["total_value_usd"] == 40000.0
 
         weights = {a["symbol"]: a["weight"] for a in snapshot["assets"]}
         assert weights["BTC"] == 0.5

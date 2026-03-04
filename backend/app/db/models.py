@@ -31,12 +31,23 @@ class ActionType(str, Enum):
     STAKING_CLAIM = "staking_claim"
     STAKING_RESTAKE = "staking_restake"
     STAKING_UNLOCK_PLAN = "staking_unlock_plan"
+    RISK_ASSET_CONCENTRATION = "risk_asset_concentration"
+    RISK_PROVIDER_CONCENTRATION = "risk_provider_concentration"
+    RISK_MODE_CHANGE = "risk_mode_change"
+    RISK_FEE_WARNING = "risk_fee_warning"
 
 
 class RecommendationStatus(str, Enum):
     NEW = "new"
     DONE = "done"
     POSTPONED = "postponed"
+    DISMISSED = "dismissed"
+
+
+class RiskMode(str, Enum):
+    NORMAL = "normal"
+    CAUTION = "caution"
+    DEFENSE = "defense"
 
 
 class Asset(Base):
@@ -55,7 +66,7 @@ class Position(Base):
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
     account: Mapped[str] = mapped_column(String(128), default="manual")
     amount: Mapped[float] = mapped_column(Float)
-    avg_cost_eur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -68,7 +79,7 @@ class Price(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
-    price_eur: Mapped[float] = mapped_column(Float)
+    price_usd: Mapped[float] = mapped_column(Float)
     as_of: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -81,14 +92,20 @@ class Strategy(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
-    base_currency: Mapped[str] = mapped_column(String(8), default="EUR")
+    base_currency: Mapped[str] = mapped_column(String(8), default="USD")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     dca_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     dca_interval_days: Mapped[int] = mapped_column(Integer, default=7)
 
     staking_unlock_window_days: Mapped[int] = mapped_column(Integer, default=3)
-    staking_min_net_reward_eur: Mapped[float] = mapped_column(Float, default=10.0)
+    staking_min_net_reward_usd: Mapped[float] = mapped_column(Float, default=10.0)
     staking_restake_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    max_asset_weight: Mapped[float] = mapped_column(Float, default=0.60)
+    max_provider_weight: Mapped[float] = mapped_column(Float, default=0.50)
+    drawdown_caution_pct: Mapped[float] = mapped_column(Float, default=0.10)
+    drawdown_defense_pct: Mapped[float] = mapped_column(Float, default=0.20)
+    min_trade_value_usd: Mapped[float] = mapped_column(Float, default=50.0)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -129,7 +146,7 @@ class StakingPosition(Base):
     next_claim_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     pending_rewards_asset: Mapped[float] = mapped_column(Float, default=0.0)
-    pending_rewards_eur: Mapped[float] = mapped_column(Float, default=0.0)
+    pending_rewards_usd: Mapped[float] = mapped_column(Float, default=0.0)
 
     last_updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -152,4 +169,30 @@ class Recommendation(Base):
     )
     status: Mapped[RecommendationStatus] = mapped_column(
         SAEnum(RecommendationStatus), default=RecommendationStatus.NEW
+    )
+
+
+class PortfolioSnapshot(Base):
+    __tablename__ = "portfolio_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    total_value_usd: Mapped[float] = mapped_column(Float)
+    peak_value_usd: Mapped[float] = mapped_column(Float)
+    drawdown_pct: Mapped[float] = mapped_column(Float)
+    risk_mode: Mapped[RiskMode] = mapped_column(SAEnum(RiskMode), default=RiskMode.NORMAL)
+
+
+class DecisionJournal(Base):
+    __tablename__ = "decision_journal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id"), index=True)
+    old_status: Mapped[RecommendationStatus] = mapped_column(SAEnum(RecommendationStatus))
+    new_status: Mapped[RecommendationStatus] = mapped_column(SAEnum(RecommendationStatus))
+    note: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

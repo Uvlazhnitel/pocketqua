@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.app.db import models
 from backend.app.db.schemas import (
+    ActionStatusUpdateIn,
     PositionUpsertIn,
     PriceUpsertIn,
     StakingPositionPatchIn,
@@ -49,7 +50,7 @@ def upsert_position(db: Session, payload: PositionUpsertIn) -> models.Position:
 
     if position:
         position.amount = payload.amount
-        position.avg_cost_eur = payload.avg_cost_eur
+        position.avg_cost_usd = payload.avg_cost_usd
         position.updated_at = utcnow()
         return position
 
@@ -57,7 +58,7 @@ def upsert_position(db: Session, payload: PositionUpsertIn) -> models.Position:
         asset_id=asset.id,
         account=payload.account,
         amount=payload.amount,
-        avg_cost_eur=payload.avg_cost_eur,
+        avg_cost_usd=payload.avg_cost_usd,
         updated_at=utcnow(),
     )
     db.add(position)
@@ -72,14 +73,22 @@ def upsert_price(db: Session, payload: PriceUpsertIn) -> models.Price:
 
     price = db.scalar(select(models.Price).where(models.Price.asset_id == asset.id))
     if price:
-        price.price_eur = payload.price_eur
+        price.price_usd = payload.price_usd
         price.as_of = utcnow()
         return price
 
-    price = models.Price(asset_id=asset.id, price_eur=payload.price_eur, as_of=utcnow())
+    price = models.Price(asset_id=asset.id, price_usd=payload.price_usd, as_of=utcnow())
     db.add(price)
     db.flush()
     return price
+
+
+def get_prices_by_symbol(db: Session) -> dict[str, float]:
+    rows = db.execute(
+        select(models.Asset.symbol, models.Price.price_usd)
+        .join(models.Price, models.Price.asset_id == models.Asset.id)
+    ).all()
+    return {symbol: price_usd for symbol, price_usd in rows}
 
 
 def set_active_strategy(db: Session, payload: StrategyUpsertIn) -> models.Strategy:
@@ -92,8 +101,13 @@ def set_active_strategy(db: Session, payload: StrategyUpsertIn) -> models.Strate
         dca_enabled=payload.dca_enabled,
         dca_interval_days=payload.dca_interval_days,
         staking_unlock_window_days=payload.staking_unlock_window_days,
-        staking_min_net_reward_eur=payload.staking_min_net_reward_eur,
+        staking_min_net_reward_usd=payload.staking_min_net_reward_usd,
         staking_restake_enabled=payload.staking_restake_enabled,
+        max_asset_weight=payload.max_asset_weight,
+        max_provider_weight=payload.max_provider_weight,
+        drawdown_caution_pct=payload.drawdown_caution_pct,
+        drawdown_defense_pct=payload.drawdown_defense_pct,
+        min_trade_value_usd=payload.min_trade_value_usd,
     )
     db.add(strategy)
     db.flush()
@@ -166,7 +180,7 @@ def upsert_staking_position(db: Session, payload: StakingPositionUpsertIn) -> mo
     row.unlock_at = payload.unlock_at
     row.next_claim_at = payload.next_claim_at
     row.pending_rewards_asset = payload.pending_rewards_asset
-    row.pending_rewards_eur = payload.pending_rewards_eur
+    row.pending_rewards_usd = payload.pending_rewards_usd
     row.last_updated_at = utcnow()
 
     db.flush()
@@ -237,7 +251,65 @@ def create_recommendation(
     return rec
 
 
+def get_recommendation(db: Session, recommendation_id: int) -> models.Recommendation | None:
+    return db.scalar(select(models.Recommendation).where(models.Recommendation.id == recommendation_id))
+
+
+def update_recommendation_status(
+    db: Session, recommendation_id: int, payload: ActionStatusUpdateIn
+) -> models.Recommendation | None:
+    rec = get_recommendation(db, recommendation_id)
+    if rec is None:
+        return None
+
+    old_status = rec.status
+    new_status = models.RecommendationStatus(payload.new_status.value)
+
+    rec.status = new_status
+    db.add(
+        models.DecisionJournal(
+            recommendation_id=rec.id,
+            old_status=old_status,
+            new_status=new_status,
+            note=payload.note,
+            created_at=utcnow(),
+        )
+    )
+    db.flush()
+    return rec
+
+
 def list_recommendations(db: Session) -> list[models.Recommendation]:
     return list(
         db.scalars(select(models.Recommendation).order_by(desc(models.Recommendation.created_at)))
     )
+
+
+def create_portfolio_snapshot(
+    db: Session,
+    *,
+    total_value_usd: float,
+    peak_value_usd: float,
+    drawdown_pct: float,
+    risk_mode: models.RiskMode,
+) -> models.PortfolioSnapshot:
+    row = models.PortfolioSnapshot(
+        total_value_usd=total_value_usd,
+        peak_value_usd=peak_value_usd,
+        drawdown_pct=drawdown_pct,
+        risk_mode=risk_mode,
+        captured_at=utcnow(),
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def get_latest_portfolio_snapshot(db: Session) -> models.PortfolioSnapshot | None:
+    return db.scalar(
+        select(models.PortfolioSnapshot).order_by(models.PortfolioSnapshot.captured_at.desc())
+    )
+
+
+def list_decision_journal(db: Session) -> list[models.DecisionJournal]:
+    return list(db.scalars(select(models.DecisionJournal).order_by(desc(models.DecisionJournal.created_at))))
