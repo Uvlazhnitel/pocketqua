@@ -19,4 +19,7 @@ def upsert_strategy(payload: StrategyUpsertIn, db: Session = Depends(get_db)) ->
         "is_active": strategy.is_active,
         "dca_enabled": strategy.dca_enabled,
         "dca_interval_days": strategy.dca_interval_days,
+        "staking_unlock_window_days": strategy.staking_unlock_window_days,
+        "staking_min_net_reward_eur": strategy.staking_min_net_reward_eur,
+        "staking_restake_enabled": strategy.staking_restake_enabled,
     }

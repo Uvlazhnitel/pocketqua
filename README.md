@@ -11,6 +11,9 @@ Core API + Rules Engine MVP for strategy-driven portfolio recommendations.
   - `rebalance`
   - `dca`
   - `noop`
+  - `staking_unlock_plan`
+  - `staking_claim`
+  - `staking_restake`
 
 ## Setup
 
@@ -85,6 +88,50 @@ curl -X POST http://127.0.0.1:8000/v1/strategy -H 'Content-Type: application/jso
 ```
 
 4. Generate and list actions:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/actions/generate
+curl http://127.0.0.1:8000/v1/actions
+```
+
+## Staking seed scenario (curl)
+
+1. Create staking-aware strategy (targets can be empty for staking-only flow):
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/strategy -H 'Content-Type: application/json' -d '{
+  "name":"StakingOnly",
+  "base_currency":"EUR",
+  "dca_enabled":false,
+  "dca_interval_days":7,
+  "staking_unlock_window_days":3,
+  "staking_min_net_reward_eur":10.0,
+  "staking_restake_enabled":true,
+  "targets":[]
+}'
+```
+
+2. Upsert a staking position:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/staking/positions -H 'Content-Type: application/json' -d '{
+  "symbol":"ETH",
+  "name":"Ethereum",
+  "asset_class":"crypto",
+  "provider":"Lido",
+  "account":"manual",
+  "staked_amount":12.0,
+  "apr_percent":4.5,
+  "fee_percent":10.0,
+  "is_locked":true,
+  "unlock_at":"2026-03-06T10:00:00+00:00",
+  "next_claim_at":"2026-03-01T10:00:00+00:00",
+  "pending_rewards_asset":0.1,
+  "pending_rewards_eur":20.0
+}'
+```
+
+3. Generate and inspect unified action feed:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/actions/generate

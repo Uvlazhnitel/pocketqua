@@ -19,12 +19,22 @@ def generate_actions(db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail="active strategy not found")
 
     targets = crud.get_strategy_targets(db, strategy.id)
-    if not targets:
-        raise HTTPException(status_code=422, detail="active strategy has no targets")
+    staking_positions = crud.list_staking_positions(db)
 
     snapshot = build_portfolio_snapshot(db)
     weights = snapshot_weights(snapshot)
-    actions = run_rules(strategy=strategy, targets=targets, weights=weights)
+    actions = run_rules(
+        strategy=strategy,
+        targets=targets,
+        weights=weights,
+        staking_positions=staking_positions,
+    )
+
+    if not targets and len(actions) == 1 and actions[0].action_type == models.ActionType.NOOP:
+        raise HTTPException(
+            status_code=422,
+            detail="active strategy has no targets and no staking actions",
+        )
 
     created_ids: list[int] = []
     for action in actions:

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from backend.app.db import models
 from backend.app.services.recommendations import build_action_payload
+from backend.app.services.staking_rules import build_staking_actions
 
 
 @dataclass
@@ -13,15 +14,22 @@ class EngineAction:
     payload_json: dict
 
 
+ACTION_ORDER = {
+    models.ActionType.STAKING_UNLOCK_PLAN: 1,
+    models.ActionType.STAKING_CLAIM: 2,
+    models.ActionType.STAKING_RESTAKE: 2,
+    models.ActionType.REBALANCE: 3,
+    models.ActionType.DCA: 4,
+    models.ActionType.NOOP: 5,
+}
+
+
 def _today_ordinal() -> int:
     return datetime.now(timezone.utc).date().toordinal()
 
 
-def run_rules(
-    *,
-    strategy: models.Strategy,
-    targets: list[models.StrategyTarget],
-    weights: dict[str, float],
+def _portfolio_actions(
+    *, strategy: models.Strategy, targets: list[models.StrategyTarget], weights: dict[str, float]
 ) -> list[EngineAction]:
     actions: list[EngineAction] = []
 
@@ -59,7 +67,7 @@ def run_rules(
             )
 
     dca_due = strategy.dca_enabled and (_today_ordinal() % strategy.dca_interval_days == 0)
-    if dca_due:
+    if dca_due and targets:
         below_target = []
         for target in targets:
             symbol = target.asset.symbol
@@ -90,6 +98,33 @@ def run_rules(
                 )
             )
 
+    return actions
+
+
+def run_rules(
+    *,
+    strategy: models.Strategy,
+    targets: list[models.StrategyTarget],
+    weights: dict[str, float],
+    staking_positions: list[models.StakingPosition],
+) -> list[EngineAction]:
+    actions: list[EngineAction] = []
+
+    actions.extend(_portfolio_actions(strategy=strategy, targets=targets, weights=weights))
+
+    staking_actions = build_staking_actions(strategy=strategy, staking_positions=staking_positions)
+    actions.extend(
+        [
+            EngineAction(
+                action_type=a.action_type,
+                title=a.title,
+                reason=a.reason,
+                payload_json=a.payload_json,
+            )
+            for a in staking_actions
+        ]
+    )
+
     if not actions:
         actions.append(
             EngineAction(
@@ -97,7 +132,7 @@ def run_rules(
                 title="No action required",
                 reason="Portfolio within strategy bands",
                 payload_json=build_action_payload(
-                    effect="No rebalance or DCA action required",
+                    effect="No rebalance, DCA, or staking action required",
                     estimated_cost_eur=None,
                     risk_note=None,
                     calculation={},
@@ -105,4 +140,5 @@ def run_rules(
             )
         )
 
+    actions.sort(key=lambda a: ACTION_ORDER.get(a.action_type, 99))
     return actions

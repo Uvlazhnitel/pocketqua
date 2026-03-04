@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from backend.app.api.actions import router as actions_router
 from backend.app.api.portfolio import router as portfolio_router
+from backend.app.api.staking import router as staking_router
 from backend.app.api.strategy import router as strategy_router
 from backend.app.core.logging import configure_logging
 from backend.app.core.settings import settings
@@ -26,4 +27,5 @@ def health() -> dict[str, str]:
 
 app.include_router(portfolio_router)
 app.include_router(strategy_router)
+app.include_router(staking_router)
 app.include_router(actions_router)

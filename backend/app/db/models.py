@@ -1,7 +1,17 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum as SAEnum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.base import Base
@@ -18,6 +28,9 @@ class ActionType(str, Enum):
     REBALANCE = "rebalance"
     DCA = "dca"
     NOOP = "noop"
+    STAKING_CLAIM = "staking_claim"
+    STAKING_RESTAKE = "staking_restake"
+    STAKING_UNLOCK_PLAN = "staking_unlock_plan"
 
 
 class RecommendationStatus(str, Enum):
@@ -72,6 +85,11 @@ class Strategy(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     dca_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     dca_interval_days: Mapped[int] = mapped_column(Integer, default=7)
+
+    staking_unlock_window_days: Mapped[int] = mapped_column(Integer, default=3)
+    staking_min_net_reward_eur: Mapped[float] = mapped_column(Float, default=10.0)
+    staking_restake_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -86,6 +104,36 @@ class StrategyTarget(Base):
     target_weight: Mapped[float] = mapped_column(Float)
     band_min: Mapped[float] = mapped_column(Float)
     band_max: Mapped[float] = mapped_column(Float)
+
+    asset: Mapped[Asset] = relationship()
+
+
+class StakingPosition(Base):
+    __tablename__ = "staking_positions"
+    __table_args__ = (UniqueConstraint("asset_id", "provider", "account", name="uq_staking_identity"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(128), index=True)
+    account: Mapped[str] = mapped_column(String(128), default="manual")
+
+    staked_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    apr_percent: Mapped[float] = mapped_column(Float, default=0.0)
+    fee_percent: Mapped[float] = mapped_column(Float, default=0.0)
+
+    lockup_days: Mapped[int] = mapped_column(Integer, default=0)
+    unbonding_days: Mapped[int] = mapped_column(Integer, default=0)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    unlock_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_claim_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    pending_rewards_asset: Mapped[float] = mapped_column(Float, default=0.0)
+    pending_rewards_eur: Mapped[float] = mapped_column(Float, default=0.0)
+
+    last_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     asset: Mapped[Asset] = relationship()
 
