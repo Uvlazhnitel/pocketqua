@@ -253,3 +253,29 @@ class TelegramChatOut(BaseModel):
     last_weekly_sent_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class CSVImportErrorOut(BaseModel):
+    row: int
+    error: str
+
+
+class PositionsImportOut(BaseModel):
+    rows_total: int
+    rows_imported: int
+    rows_skipped: int
+    errors: list[CSVImportErrorOut]
+    dry_run: bool
+
+
+class PriceSyncRunOut(BaseModel):
+    run_id: int
+    status: str
+    updated_assets_count: int
+    skipped_assets_count: int
+    errors_count: int
+
+
+class PriceSyncStatusOut(BaseModel):
+    latest_run: dict | None
+    next_scheduled_at: str | None

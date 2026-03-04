@@ -3,6 +3,7 @@ from enum import Enum
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     Enum as SAEnum,
@@ -50,6 +51,17 @@ class RiskMode(str, Enum):
     DEFENSE = "defense"
 
 
+class PriceSource(str, Enum):
+    MANUAL = "manual"
+    COINGECKO = "coingecko"
+
+
+class PriceSyncRunStatus(str, Enum):
+    OK = "ok"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
 class Asset(Base):
     __tablename__ = "assets"
 
@@ -76,11 +88,14 @@ class Position(Base):
 
 class Price(Base):
     __tablename__ = "prices"
+    __table_args__ = (UniqueConstraint("asset_id", "source", name="uq_price_asset_source"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
     price_usd: Mapped[float] = mapped_column(Float)
-    as_of: Mapped[datetime] = mapped_column(
+    source: Mapped[PriceSource] = mapped_column(SAEnum(PriceSource), nullable=False)
+    is_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
@@ -202,7 +217,7 @@ class TelegramChat(Base):
     __tablename__ = "telegram_chats"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    chat_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     daily_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     weekly_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -214,3 +229,15 @@ class TelegramChat(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class PriceSyncRun(Base):
+    __tablename__ = "price_sync_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[PriceSyncRunStatus] = mapped_column(SAEnum(PriceSyncRunStatus), default=PriceSyncRunStatus.OK)
+    updated_assets_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_summary: Mapped[str | None] = mapped_column(String(2048), nullable=True)

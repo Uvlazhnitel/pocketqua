@@ -1,12 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.db import models
+from backend.app.db import crud, models
 
 
 def build_portfolio_snapshot(db: Session) -> dict:
     positions = list(db.scalars(select(models.Position)))
-    prices = {p.asset_id: p for p in db.scalars(select(models.Price))}
+    prices = crud.get_effective_prices_by_asset_id(db)
     assets = {a.id: a for a in db.scalars(select(models.Asset))}
 
     by_symbol: dict[str, dict] = {}

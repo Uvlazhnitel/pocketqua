@@ -33,6 +33,10 @@ def get_or_create_asset(
     return asset
 
 
+def list_assets(db: Session) -> list[models.Asset]:
+    return list(db.scalars(select(models.Asset).order_by(models.Asset.symbol.asc())))
+
+
 def upsert_position(db: Session, payload: PositionUpsertIn) -> models.Position:
     asset = get_or_create_asset(
         db,
@@ -66,29 +70,85 @@ def upsert_position(db: Session, payload: PositionUpsertIn) -> models.Position:
     return position
 
 
-def upsert_price(db: Session, payload: PriceUpsertIn) -> models.Price:
-    asset = db.scalar(select(models.Asset).where(models.Asset.symbol == payload.symbol))
+def _upsert_price(
+    db: Session,
+    *,
+    symbol: str,
+    price_usd: float,
+    source: models.PriceSource,
+    is_override: bool,
+) -> models.Price:
+    asset = db.scalar(select(models.Asset).where(models.Asset.symbol == symbol))
     if not asset:
-        raise ValueError(f"asset {payload.symbol} does not exist")
+        raise ValueError(f"asset {symbol} does not exist")
 
-    price = db.scalar(select(models.Price).where(models.Price.asset_id == asset.id))
+    price = db.scalar(
+        select(models.Price).where(
+            models.Price.asset_id == asset.id,
+            models.Price.source == source,
+        )
+    )
     if price:
-        price.price_usd = payload.price_usd
-        price.as_of = utcnow()
+        price.price_usd = price_usd
+        price.is_override = is_override
+        price.updated_at = utcnow()
         return price
 
-    price = models.Price(asset_id=asset.id, price_usd=payload.price_usd, as_of=utcnow())
+    price = models.Price(
+        asset_id=asset.id,
+        price_usd=price_usd,
+        source=source,
+        is_override=is_override,
+        updated_at=utcnow(),
+    )
     db.add(price)
     db.flush()
     return price
 
 
+def upsert_price(db: Session, payload: PriceUpsertIn) -> models.Price:
+    return _upsert_price(
+        db,
+        symbol=payload.symbol,
+        price_usd=payload.price_usd,
+        source=models.PriceSource.MANUAL,
+        is_override=True,
+    )
+
+
+def upsert_price_from_coingecko(db: Session, *, symbol: str, price_usd: float) -> models.Price:
+    return _upsert_price(
+        db,
+        symbol=symbol,
+        price_usd=price_usd,
+        source=models.PriceSource.COINGECKO,
+        is_override=False,
+    )
+
+
+def get_effective_prices_by_asset_id(db: Session) -> dict[int, models.Price]:
+    rows = list(db.scalars(select(models.Price)))
+    selected: dict[int, models.Price] = {}
+
+    def rank(p: models.Price) -> tuple[int, datetime]:
+        return (1 if p.is_override else 0, p.updated_at)
+
+    for row in rows:
+        current = selected.get(row.asset_id)
+        if current is None or rank(row) > rank(current):
+            selected[row.asset_id] = row
+    return selected
+
+
 def get_prices_by_symbol(db: Session) -> dict[str, float]:
-    rows = db.execute(
-        select(models.Asset.symbol, models.Price.price_usd)
-        .join(models.Price, models.Price.asset_id == models.Asset.id)
-    ).all()
-    return {symbol: price_usd for symbol, price_usd in rows}
+    assets = {a.id: a for a in list_assets(db)}
+    effective = get_effective_prices_by_asset_id(db)
+    out: dict[str, float] = {}
+    for asset_id, price in effective.items():
+        asset = assets.get(asset_id)
+        if asset:
+            out[asset.symbol] = price.price_usd
+    return out
 
 
 def set_active_strategy(db: Session, payload: StrategyUpsertIn) -> models.Strategy:
@@ -405,3 +465,35 @@ def mark_weekly_sent(db: Session, *, chat_id: int) -> None:
     row.last_weekly_sent_at = utcnow()
     row.updated_at = utcnow()
     db.flush()
+
+
+def create_price_sync_run(db: Session) -> models.PriceSyncRun:
+    row = models.PriceSyncRun(started_at=utcnow(), status=models.PriceSyncRunStatus.OK)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def finish_price_sync_run(
+    db: Session,
+    *,
+    run_id: int,
+    status: models.PriceSyncRunStatus,
+    updated_assets_count: int,
+    error_count: int,
+    error_summary: str | None,
+) -> models.PriceSyncRun | None:
+    row = db.scalar(select(models.PriceSyncRun).where(models.PriceSyncRun.id == run_id))
+    if row is None:
+        return None
+    row.finished_at = utcnow()
+    row.status = status
+    row.updated_assets_count = updated_assets_count
+    row.error_count = error_count
+    row.error_summary = error_summary
+    db.flush()
+    return row
+
+
+def get_latest_price_sync_run(db: Session) -> models.PriceSyncRun | None:
+    return db.scalar(select(models.PriceSyncRun).order_by(models.PriceSyncRun.started_at.desc()))
